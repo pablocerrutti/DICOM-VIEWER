@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10151c"><meta name="description" content="Visor DICOM local"><title>DICOM Viewer Local</title></head>
+<body><div id="app">
+<header class="topbar"><div class="brand"><div class="brand-mark">D</div><div><div class="brand-title">DICOM VIEWER</div><div class="brand-subtitle">Visor local · procesamiento en el navegador</div></div></div>
+<div class="top-actions"><button id="openFilesBtn" class="primary">📂 Abrir DICOM</button><button id="openFolderBtn" class="secondary">📁 Abrir carpeta</button><input id="fileInput" type="file" accept=".dcm,application/dicom" multiple hidden><input id="folderInput" type="file" webkitdirectory directory multiple hidden></div></header>
+<main class="workspace"><aside class="sidebar">
+<section class="panel"><div class="panel-title">ESTUDIO</div><div class="meta-grid"><span>Paciente</span><strong id="patientName">—</strong><span>ID</span><strong id="patientId">—</strong><span>Estudio</span><strong id="studyDescription">—</strong><span>Modalidad</span><strong id="modality">—</strong><span>Fecha</span><strong id="studyDate">—</strong></div></section>
+<section class="panel"><div class="panel-title-row"><div class="panel-title">IMÁGENES</div><span id="imageCountBadge" class="badge">0</span></div><div id="seriesList" class="series-list"><div class="empty-side">Abra uno o varios archivos DICOM.</div></div></section>
+<section class="panel"><div class="panel-title">CONTROLES</div><div class="help-line"><kbd>R</kbd> Restablecer</div><div class="help-line"><kbd>I</kbd> Invertir</div><div class="help-line"><kbd>F</kbd> Pantalla completa</div><div class="help-line"><kbd>←</kbd><kbd>→</kbd> Cortes</div></section>
+</aside>
+<section class="viewer-area"><div id="viewport" class="viewport"><div id="dropOverlay" class="drop-overlay"><div class="drop-icon">◈</div><div class="drop-title">Arrastra archivos DICOM aquí</div><div class="drop-subtitle">o utiliza “Abrir DICOM”</div></div>
+<div class="hud hud-tl"><div id="hudPatient">PACIENTE —</div><div id="hudStudy">ESTUDIO —</div></div><div class="hud hud-tr"><div id="hudModality">—</div><div id="hudSlice">0 / 0</div></div><div class="hud hud-bl"><div>W/L <span id="windowText">— / —</span></div><div>ZOOM <span id="zoomText">1.00×</span></div></div><div class="orientation">A</div><div class="orientation bottom">P</div></div>
+<div class="toolbar"><button data-action="reset">↺<span>Reset</span></button><button data-action="invert">◐<span>Invertir</span></button><button data-action="zoomIn">＋<span>Zoom +</span></button><button data-action="zoomOut">－<span>Zoom −</span></button><button data-action="fit">□<span>Ajustar</span></button><button data-action="fullscreen">⛶<span>Pantalla</span></button><button data-action="cine" id="cineBtn">▶<span>Cine</span></button></div>
+<div class="slice-control"><button id="prevBtn">‹</button><input id="sliceSlider" type="range" min="0" max="0" value="0" disabled><button id="nextBtn">›</button><span id="sliceLabel">0 / 0</span></div></section></main>
+<footer class="statusbar"><span id="statusText">Listo. Los archivos permanecen en este dispositivo.</span><span id="fileInfo">Sin estudio cargado</span></footer></div>
+<div id="loading" class="loading hidden"><div class="spinner"></div><div id="loadingText">Cargando DICOM…</div></div>
+<script type="module" src="/src/main.js"></script></body></html>
