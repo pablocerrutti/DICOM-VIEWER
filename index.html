@@ -3,16 +3,459 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07131d">
+<meta name="theme-color" content="#061018">
 <meta name="description" content="DICOM Viewer — visor médico local y privado">
 <title>DICOM Viewer · Medical Imaging</title>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#04090e;
+  --surface:#07131c;
+  --surface2:#0a1b25;
+  --surface3:#0e2530;
+  --border:#193845;
+  --border2:#285664;
+  --text:#e9f4f6;
+  --muted:#75919b;
+  --dim:#506b75;
+  --cyan:#35d4e3;
+  --cyan2:#8af3f5;
+  --green:#4ee0b7;
+  --shadow:0 20px 60px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{
+  font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+button,input{font:inherit}
+button{color:inherit}
+#app{
+  width:100%;
+  height:100vh;
+  display:grid;
+  grid-template-rows:70px minmax(0,1fr) 30px;
+  background:
+    radial-gradient(900px 500px at 70% -15%,rgba(35,157,174,.22),transparent 65%),
+    radial-gradient(700px 500px at 100% 100%,rgba(24,92,108,.10),transparent 70%),
+    var(--bg);
+}
+
+/* CABECERA */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 22px;
+  border-bottom:1px solid var(--border);
+  background:rgba(5,14,21,.96);
+  box-shadow:0 8px 30px rgba(0,0,0,.28);
+  position:relative;
+  z-index:20;
+}
+.topbar:after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  opacity:.35;
+}
+.brand{display:flex;align-items:center;gap:13px}
+.brand-mark{
+  width:42px;height:42px;border-radius:13px;
+  display:grid;place-items:center;
+  position:relative;
+  background:linear-gradient(145deg,#103844,#071a23);
+  border:1px solid #32717c;
+  box-shadow:0 0 28px rgba(53,212,227,.13),inset 0 0 20px rgba(53,212,227,.06);
+}
+.brand-mark:before,.brand-mark:after{
+  content:"";position:absolute;background:var(--cyan);
+  border-radius:2px;opacity:.85;
+}
+.brand-mark:before{width:18px;height:4px}
+.brand-mark:after{width:4px;height:18px}
+.brand-mark span{display:none}
+.brand-title{
+  font-size:15px;font-weight:800;letter-spacing:.16em;
+}
+.brand-title b{color:var(--cyan2)}
+.brand-subtitle{
+  margin-top:4px;
+  font-size:8px;
+  letter-spacing:.19em;
+  color:#6e8b95;
+}
+.top-actions{display:flex;gap:9px}
+.top-actions button{
+  height:38px;
+  padding:0 15px;
+  border-radius:9px;
+  border:1px solid var(--border2);
+  cursor:pointer;
+  display:flex;align-items:center;gap:8px;
+  font-size:10px;font-weight:700;
+  transition:.18s ease;
+}
+.top-actions button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 25px rgba(0,0,0,.35);
+  border-color:#4b8894;
+}
+.primary{
+  background:linear-gradient(135deg,#1192a2,#086273);
+  border-color:#36c2ce!important;
+  box-shadow:0 5px 18px rgba(20,166,181,.18);
+}
+.secondary{background:#0b1d26}
+.btn-icon{font-size:17px}
+
+/* ESTRUCTURA */
+.workspace{
+  min-height:0;
+  display:grid;
+  grid-template-columns:300px minmax(0,1fr);
+}
+.sidebar{
+  min-height:0;
+  overflow:auto;
+  border-right:1px solid var(--border);
+  background:linear-gradient(180deg,#07151d,#040c12);
+}
+.panel{
+  padding:17px;
+  border-bottom:1px solid #112b35;
+}
+.panel-title-row{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.panel-title{
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.17em;
+  color:#7c99a3;
+}
+.live-dot,.status-dot{
+  display:inline-block;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 12px rgba(78,224,183,.8);
+}
+.patient-block{
+  display:flex;align-items:center;gap:11px;
+  margin:18px 0 17px;
+}
+.patient-avatar{
+  width:43px;height:43px;border-radius:13px;
+  display:grid;place-items:center;
+  background:linear-gradient(145deg,#123943,#081d26);
+  border:1px solid #2a6571;
+  color:#8aeaf0;
+  font-size:15px;font-weight:800;
+}
+.patient-label{
+  color:#62808b;
+  font-size:8px;
+  letter-spacing:.15em;
+}
+.patient-block strong{
+  display:block;
+  max-width:205px;
+  margin-top:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12px;
+}
+.meta-grid{
+  display:grid;
+  grid-template-columns:66px minmax(0,1fr);
+  gap:10px 8px;
+  font-size:10px;
+}
+.meta-grid span{color:#58727c}
+.meta-grid strong{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#d1e1e5;font-weight:600;
+}
+.badge{
+  padding:4px 8px;border-radius:99px;
+  color:#79e8ee;background:#0b2c36;
+  border:1px solid #245d68;
+  font-size:9px;font-weight:700;
+}
+.series-list{margin-top:12px;display:flex;flex-direction:column;gap:5px}
+.series-item{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  gap:10px;
+  padding:8px;
+  border:1px solid transparent;
+  border-radius:10px;
+  cursor:pointer;
+  transition:.15s;
+}
+.series-item:hover{background:#0a222c}
+.series-item.active{
+  background:linear-gradient(90deg,#103743,#09212a);
+  border-color:#28616d;
+  box-shadow:inset 3px 0 var(--cyan);
+}
+.thumb{
+  width:42px;height:42px;border-radius:8px;
+  display:grid;place-items:center;
+  background:linear-gradient(145deg,#050b0f,#0d2028);
+  border:1px solid #1b3944;
+  color:#617d87;
+  font:700 9px Consolas,monospace;
+}
+.series-item.active .thumb{border-color:#327683;color:#91eff3}
+.series-name{
+  margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:10px;color:#d7e6e9;
+}
+.series-sub{margin-top:5px;font-size:8px;color:#627d87}
+.empty-side{
+  padding:25px 8px;
+  text-align:center;
+  display:flex;flex-direction:column;gap:7px;
+  color:#607b85;
+}
+.empty-icon{font-size:28px;color:#3e7f89}
+.empty-side b{font-size:10px;color:#8da5ad}
+.empty-side small{font-size:9px;line-height:1.5}
+.help-line{
+  display:flex;align-items:center;gap:5px;
+  margin-top:9px;color:#718b94;font-size:9px;
+}
+.help-line span{margin-right:5px}
+kbd{
+  min-width:22px;height:19px;
+  display:inline-grid;place-items:center;
+  border:1px solid #294751;
+  border-radius:5px;background:#0a1d26;
+  color:#a5bbc1;font-size:8px;
+}
+.privacy-note{
+  margin-top:16px;padding:10px;
+  border:1px solid #17424b;
+  border-radius:9px;background:#082027;
+  color:#6d8992;font-size:8px;line-height:1.5;
+}
+.privacy-note span{color:var(--green)}
+
+/* VISOR */
+.viewer-area{
+  min-width:0;min-height:0;
+  display:grid;
+  grid-template-rows:minmax(0,1fr) 66px 44px;
+  background:#000;
+}
+.viewport{
+  min-width:0;min-height:0;
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at center,#10191d 0,#050809 42%,#000 78%);
+}
+.viewport canvas{
+  width:100%!important;
+  height:100%!important;
+  display:block;
+}
+.viewport:before{
+  content:"";
+  position:absolute;inset:0;
+  z-index:2;pointer-events:none;
+  background:radial-gradient(circle at center,transparent 48%,rgba(0,0,0,.68) 100%);
+}
+.viewport:after{
+  content:"";
+  position:absolute;inset:0;
+  z-index:1;pointer-events:none;
+  opacity:.045;
+  background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,#fff 3px);
+}
+.drop-overlay{
+  position:absolute;inset:0;z-index:8;
+  display:flex;flex-direction:column;
+  justify-content:center;align-items:center;
+  pointer-events:none;
+  background:radial-gradient(circle at center,rgba(12,54,65,.35),transparent 52%);
+}
+.drop-overlay.hidden{display:none}
+.drop-ring{
+  width:104px;height:104px;border-radius:50%;
+  display:grid;place-items:center;
+  border:1px solid rgba(70,219,231,.65);
+  background:rgba(7,30,38,.82);
+  box-shadow:
+    0 0 0 13px rgba(53,212,227,.035),
+    0 0 60px rgba(53,212,227,.13);
+  animation:viewerPulse 2.4s ease-in-out infinite;
+}
+.drop-icon{
+  color:var(--cyan2);
+  font-size:42px;font-weight:200;
+}
+.drop-title{
+  margin-top:18px;
+  color:#d4e7ea;
+  font-size:12px;font-weight:800;
+  letter-spacing:.21em;
+}
+.drop-subtitle{margin-top:8px;color:#79949d;font-size:10px}
+.drop-hint{margin-top:10px;color:#526d77;font-size:8px}
+.hud{
+  position:absolute;z-index:5;
+  pointer-events:none;
+  color:#c3d4d8;
+  font:9px/1.7 Consolas,monospace;
+  text-shadow:0 1px 5px #000;
+}
+.hud-tl{top:20px;left:21px}
+.hud-tr{top:20px;right:21px;text-align:right}
+.hud-bl{bottom:18px;left:21px}
+.hud-accent{color:#70e5ec;font-weight:700;letter-spacing:.1em}
+.orientation{
+  position:absolute;z-index:5;
+  top:50%;left:19px;
+  transform:translateY(-50%);
+  color:#8ba4ac;
+  font:9px Consolas,monospace;
+  text-shadow:0 1px 4px #000;
+}
+.orientation.bottom{
+  top:auto;left:50%;bottom:16px;
+  transform:translateX(-50%);
+}
+.corner{
+  position:absolute;z-index:5;
+  width:21px;height:21px;
+  border-color:rgba(91,214,223,.5);
+}
+.corner.tl{top:12px;left:12px;border-top:1px solid;border-left:1px solid}
+.corner.tr{top:12px;right:12px;border-top:1px solid;border-right:1px solid}
+.corner.bl{bottom:12px;left:12px;border-bottom:1px solid;border-left:1px solid}
+.corner.br{bottom:12px;right:12px;border-bottom:1px solid;border-right:1px solid}
+
+/* CONTROLES */
+.toolbar{
+  display:flex;align-items:center;justify-content:center;
+  gap:6px;
+  background:linear-gradient(#091920,#07131a);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.toolbar button{
+  min-width:78px;height:50px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  cursor:pointer;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:5px;
+  transition:.15s;
+}
+.toolbar button i{
+  font-style:normal;font-size:18px;
+  line-height:16px;color:#a9c2c9;
+}
+.toolbar button span{font-size:8px;color:#637d86}
+.toolbar button:hover{
+  background:#102933;
+  border-color:#2a5864;
+  box-shadow:0 4px 18px rgba(0,0,0,.4);
+}
+.toolbar button:hover i{color:var(--cyan2)}
+.toolbar button:hover span{color:#b0c4ca}
+.slice-control{
+  display:flex;align-items:center;gap:10px;
+  padding:0 15px;background:#061119;
+}
+.slice-control button{
+  width:31px;height:26px;
+  border:1px solid #203e48;
+  background:#0b2029;border-radius:6px;
+  cursor:pointer;color:#94adb5;
+}
+.slice-control button:hover:not(:disabled){
+  border-color:#3b7782;color:#e1f3f5;
+}
+.slice-control button:disabled{opacity:.3}
+.slice-control input{flex:1;accent-color:var(--cyan)}
+.slice-control span{
+  min-width:58px;text-align:right;
+  color:#7c969f;font:9px Consolas,monospace;
+}
+
+/* STATUS */
+.statusbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 13px;
+  background:#040c12;
+  border-top:1px solid #102831;
+  color:#607984;font-size:8px;
+}
+.status-dot{margin-right:6px}
+.loading{
+  position:fixed;inset:0;z-index:100;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(2,8,12,.86);
+  backdrop-filter:blur(9px);
+}
+.loading.hidden{display:none}
+.loading-card{
+  min-width:270px;padding:28px 32px;
+  text-align:center;
+  border:1px solid #2b606b;
+  border-radius:16px;
+  background:linear-gradient(145deg,#0b2029,#07151c);
+  box-shadow:var(--shadow);
+}
+.spinner{
+  width:34px;height:34px;
+  margin:0 auto 14px;
+  border:2px solid #20414b;
+  border-top-color:var(--cyan);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+.loading-card small{
+  display:block;margin-top:8px;
+  color:#5f7a84;font-size:8px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes viewerPulse{
+  50%{transform:scale(1.045);box-shadow:0 0 0 19px rgba(53,212,227,.015),0 0 75px rgba(53,212,227,.22)}
+}
+@media(max-width:760px){
+  #app{grid-template-rows:59px minmax(0,1fr) 27px}
+  .topbar{padding:0 10px}
+  .brand-subtitle{display:none}
+  .top-actions{gap:5px}
+  .top-actions button{height:34px;padding:0 10px;font-size:9px}
+  .btn-icon{display:none}
+  .workspace{grid-template-columns:205px minmax(0,1fr)}
+  .toolbar{gap:2px}
+  .toolbar button{min-width:48px}
+  .toolbar button span{font-size:7px}
+}
+</style>
 </head>
+
 <body>
 <div id="app">
 <header class="topbar">
   <div class="brand">
-    <div class="brand-mark"><span>+</span><i></i></div>
-    <div><div class="brand-title">DICOM <b>VIEWER</b></div><div class="brand-subtitle">MEDICAL IMAGING · PROCESAMIENTO LOCAL</div></div>
+    <div class="brand-mark"><span>+</span></div>
+    <div>
+      <div class="brand-title">DICOM <b>VIEWER</b></div>
+      <div class="brand-subtitle">MEDICAL IMAGING · PROCESAMIENTO LOCAL</div>
+    </div>
   </div>
   <div class="top-actions">
     <button id="openFilesBtn" class="primary"><span class="btn-icon">＋</span> Abrir estudio</button>
@@ -21,11 +464,15 @@
     <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
   </div>
 </header>
+
 <main class="workspace">
 <aside class="sidebar">
   <section class="panel study-card">
     <div class="panel-title-row"><div class="panel-title">INFORMACIÓN DEL ESTUDIO</div><span class="live-dot"></span></div>
-    <div class="patient-block"><div class="patient-avatar">P</div><div><div class="patient-label">PACIENTE</div><strong id="patientName">—</strong></div></div>
+    <div class="patient-block">
+      <div class="patient-avatar">P</div>
+      <div><div class="patient-label">PACIENTE</div><strong id="patientName">—</strong></div>
+    </div>
     <div class="meta-grid">
       <span>ID</span><strong id="patientId">—</strong>
       <span>Estudio</span><strong id="studyDescription">—</strong>
@@ -33,10 +480,18 @@
       <span>Fecha</span><strong id="studyDate">—</strong>
     </div>
   </section>
+
   <section class="panel">
     <div class="panel-title-row"><div class="panel-title">SERIE / IMÁGENES</div><span id="imageCountBadge" class="badge">0</span></div>
-    <div id="seriesList" class="series-list"><div class="empty-side"><span class="empty-icon">◫</span><b>Sin estudio cargado</b><small>Seleccione archivos DICOM o una carpeta con un estudio.</small></div></div>
+    <div id="seriesList" class="series-list">
+      <div class="empty-side">
+        <span class="empty-icon">◫</span>
+        <b>Sin estudio cargado</b>
+        <small>Seleccione archivos DICOM o una carpeta con un estudio.</small>
+      </div>
+    </div>
   </section>
+
   <section class="panel controls-card">
     <div class="panel-title">CONTROLES RÁPIDOS</div>
     <div class="help-line"><kbd>R</kbd><span>Restablecer</span><kbd>I</kbd><span>Invertir</span></div>
@@ -44,20 +499,36 @@
     <div class="privacy-note"><span>●</span> Los estudios se procesan localmente. No se suben a ningún servidor.</div>
   </section>
 </aside>
+
 <section class="viewer-area">
   <div id="viewport" class="viewport">
     <div id="dropOverlay" class="drop-overlay">
-      <div class="drop-ring"><div class="drop-icon">+</div></div>
+      <div class="drop-ring"><div class="drop-icon">＋</div></div>
       <div class="drop-title">CARGAR ESTUDIO DICOM</div>
       <div class="drop-subtitle">Arrastre archivos o una carpeta aquí</div>
       <div class="drop-hint">También puede utilizar <b>Abrir estudio</b> o <b>Abrir carpeta</b></div>
     </div>
-    <div class="hud hud-tl"><div class="hud-accent">DICOM VIEWER</div><div id="hudPatient">PACIENTE —</div><div id="hudStudy">ESTUDIO —</div></div>
-    <div class="hud hud-tr"><div class="hud-accent" id="hudModality">—</div><div id="hudSlice">0 / 0</div></div>
-    <div class="hud hud-bl"><div>W/L <span id="windowText">— / —</span></div><div>ZOOM <span id="zoomText">1.00×</span></div></div>
-    <div class="orientation">A</div><div class="orientation bottom">P</div>
-    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+
+    <div class="hud hud-tl">
+      <div class="hud-accent">DICOM VIEWER</div>
+      <div id="hudPatient">PACIENTE —</div>
+      <div id="hudStudy">ESTUDIO —</div>
+    </div>
+    <div class="hud hud-tr">
+      <div class="hud-accent" id="hudModality">—</div>
+      <div id="hudSlice">0 / 0</div>
+    </div>
+    <div class="hud hud-bl">
+      <div>W/L <span id="windowText">— / —</span></div>
+      <div>ZOOM <span id="zoomText">1.00×</span></div>
+    </div>
+
+    <div class="orientation">A</div>
+    <div class="orientation bottom">P</div>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
   </div>
+
   <div class="toolbar">
     <button data-action="reset"><i>↺</i><span>Restablecer</span></button>
     <button data-action="invert"><i>◐</i><span>Invertir</span></button>
@@ -67,6 +538,7 @@
     <button data-action="fullscreen"><i>⛶</i><span>Pantalla</span></button>
     <button data-action="cine" id="cineBtn"><i>▶</i><span>Cine</span></button>
   </div>
+
   <div class="slice-control">
     <button id="prevBtn" aria-label="Imagen anterior">‹</button>
     <input id="sliceSlider" type="range" min="0" max="0" value="0" disabled>
@@ -75,9 +547,21 @@
   </div>
 </section>
 </main>
-<footer class="statusbar"><span><i class="status-dot"></i><span id="statusText">Listo · procesamiento local</span></span><span id="fileInfo">Sin estudio cargado</span></footer>
+
+<footer class="statusbar">
+  <span><i class="status-dot"></i><span id="statusText">Listo · procesamiento local</span></span>
+  <span id="fileInfo">Sin estudio cargado</span>
+</footer>
 </div>
-<div id="loading" class="loading hidden"><div class="loading-card"><div class="spinner"></div><div id="loadingText">Preparando estudio…</div><small>Procesamiento local en este dispositivo</small></div></div>
+
+<div id="loading" class="loading hidden">
+  <div class="loading-card">
+    <div class="spinner"></div>
+    <div id="loadingText">Preparando estudio…</div>
+    <small>Procesamiento local en este dispositivo</small>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
