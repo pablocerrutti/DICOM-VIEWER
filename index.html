@@ -1,17 +1,83 @@
 <!doctype html>
-<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10151c"><meta name="description" content="Visor DICOM local"><title>DICOM Viewer Local</title></head>
-<body><div id="app">
-<header class="topbar"><div class="brand"><div class="brand-mark">D</div><div><div class="brand-title">DICOM VIEWER</div><div class="brand-subtitle">Visor local · procesamiento en el navegador</div></div></div>
-<div class="top-actions"><button id="openFilesBtn" class="primary">📂 Abrir DICOM</button><button id="openFolderBtn" class="secondary">📁 Abrir carpeta</button><input id="fileInput" type="file" accept=".dcm,application/dicom" multiple hidden><input id="folderInput" type="file" webkitdirectory directory multiple hidden></div></header>
-<main class="workspace"><aside class="sidebar">
-<section class="panel"><div class="panel-title">ESTUDIO</div><div class="meta-grid"><span>Paciente</span><strong id="patientName">—</strong><span>ID</span><strong id="patientId">—</strong><span>Estudio</span><strong id="studyDescription">—</strong><span>Modalidad</span><strong id="modality">—</strong><span>Fecha</span><strong id="studyDate">—</strong></div></section>
-<section class="panel"><div class="panel-title-row"><div class="panel-title">IMÁGENES</div><span id="imageCountBadge" class="badge">0</span></div><div id="seriesList" class="series-list"><div class="empty-side">Abra uno o varios archivos DICOM.</div></div></section>
-<section class="panel"><div class="panel-title">CONTROLES</div><div class="help-line"><kbd>R</kbd> Restablecer</div><div class="help-line"><kbd>I</kbd> Invertir</div><div class="help-line"><kbd>F</kbd> Pantalla completa</div><div class="help-line"><kbd>←</kbd><kbd>→</kbd> Cortes</div></section>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07131d">
+<meta name="description" content="DICOM Viewer — visor médico local y privado">
+<title>DICOM Viewer · Medical Imaging</title>
+</head>
+<body>
+<div id="app">
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark"><span>+</span></div>
+    <div><div class="brand-title">DICOM <b>VIEWER</b></div><div class="brand-subtitle">MEDICAL IMAGING · PROCESAMIENTO LOCAL</div></div>
+  </div>
+  <div class="top-actions">
+    <button id="openFilesBtn" class="primary"><span class="btn-icon">＋</span> Abrir estudio</button>
+    <button id="openFolderBtn" class="secondary"><span class="btn-icon">▱</span> Abrir carpeta</button>
+    <input id="fileInput" type="file" accept=".dcm,application/dicom" multiple hidden>
+    <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+  </div>
+</header>
+<main class="workspace">
+<aside class="sidebar">
+  <section class="panel study-card">
+    <div class="panel-title-row"><div class="panel-title">INFORMACIÓN DEL ESTUDIO</div><span class="live-dot"></span></div>
+    <div class="patient-block"><div class="patient-avatar">P</div><div><div class="patient-label">PACIENTE</div><strong id="patientName">—</strong></div></div>
+    <div class="meta-grid">
+      <span>ID</span><strong id="patientId">—</strong>
+      <span>Estudio</span><strong id="studyDescription">—</strong>
+      <span>Modalidad</span><strong id="modality">—</strong>
+      <span>Fecha</span><strong id="studyDate">—</strong>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-title-row"><div class="panel-title">SERIE / IMÁGENES</div><span id="imageCountBadge" class="badge">0</span></div>
+    <div id="seriesList" class="series-list"><div class="empty-side"><span class="empty-icon">◫</span><b>Sin estudio cargado</b><small>Seleccione archivos DICOM o una carpeta con un estudio.</small></div></div>
+  </section>
+  <section class="panel controls-card">
+    <div class="panel-title">CONTROLES RÁPIDOS</div>
+    <div class="help-line"><kbd>R</kbd><span>Restablecer</span><kbd>I</kbd><span>Invertir</span></div>
+    <div class="help-line"><kbd>F</kbd><span>Pantalla completa</span><kbd>← →</kbd><span>Cortes</span></div>
+    <div class="privacy-note"><span>●</span> Los estudios se procesan localmente. No se suben a ningún servidor.</div>
+  </section>
 </aside>
-<section class="viewer-area"><div id="viewport" class="viewport"><div id="dropOverlay" class="drop-overlay"><div class="drop-icon">◈</div><div class="drop-title">Arrastra archivos DICOM aquí</div><div class="drop-subtitle">o utiliza “Abrir DICOM”</div></div>
-<div class="hud hud-tl"><div id="hudPatient">PACIENTE —</div><div id="hudStudy">ESTUDIO —</div></div><div class="hud hud-tr"><div id="hudModality">—</div><div id="hudSlice">0 / 0</div></div><div class="hud hud-bl"><div>W/L <span id="windowText">— / —</span></div><div>ZOOM <span id="zoomText">1.00×</span></div></div><div class="orientation">A</div><div class="orientation bottom">P</div></div>
-<div class="toolbar"><button data-action="reset">↺<span>Reset</span></button><button data-action="invert">◐<span>Invertir</span></button><button data-action="zoomIn">＋<span>Zoom +</span></button><button data-action="zoomOut">－<span>Zoom −</span></button><button data-action="fit">□<span>Ajustar</span></button><button data-action="fullscreen">⛶<span>Pantalla</span></button><button data-action="cine" id="cineBtn">▶<span>Cine</span></button></div>
-<div class="slice-control"><button id="prevBtn">‹</button><input id="sliceSlider" type="range" min="0" max="0" value="0" disabled><button id="nextBtn">›</button><span id="sliceLabel">0 / 0</span></div></section></main>
-<footer class="statusbar"><span id="statusText">Listo. Los archivos permanecen en este dispositivo.</span><span id="fileInfo">Sin estudio cargado</span></footer></div>
-<div id="loading" class="loading hidden"><div class="spinner"></div><div id="loadingText">Cargando DICOM…</div></div>
-<script type="module" src="/src/main.js"></script></body></html>
+<section class="viewer-area">
+  <div id="viewport" class="viewport">
+    <div id="dropOverlay" class="drop-overlay">
+      <div class="drop-ring"><div class="drop-icon">+</div></div>
+      <div class="drop-title">CARGAR ESTUDIO DICOM</div>
+      <div class="drop-subtitle">Arrastre archivos o una carpeta aquí</div>
+      <div class="drop-hint">También puede utilizar <b>Abrir estudio</b> o <b>Abrir carpeta</b></div>
+    </div>
+    <div class="hud hud-tl"><div class="hud-accent">DICOM VIEWER</div><div id="hudPatient">PACIENTE —</div><div id="hudStudy">ESTUDIO —</div></div>
+    <div class="hud hud-tr"><div class="hud-accent" id="hudModality">—</div><div id="hudSlice">0 / 0</div></div>
+    <div class="hud hud-bl"><div>W/L <span id="windowText">— / —</span></div><div>ZOOM <span id="zoomText">1.00×</span></div></div>
+    <div class="orientation">A</div><div class="orientation bottom">P</div>
+    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  </div>
+  <div class="toolbar">
+    <button data-action="reset"><i>↺</i><span>Restablecer</span></button>
+    <button data-action="invert"><i>◐</i><span>Invertir</span></button>
+    <button data-action="zoomIn"><i>＋</i><span>Acercar</span></button>
+    <button data-action="zoomOut"><i>－</i><span>Alejar</span></button>
+    <button data-action="fit"><i>⌗</i><span>Ajustar</span></button>
+    <button data-action="fullscreen"><i>⛶</i><span>Pantalla</span></button>
+    <button data-action="cine" id="cineBtn"><i>▶</i><span>Cine</span></button>
+  </div>
+  <div class="slice-control">
+    <button id="prevBtn" aria-label="Imagen anterior">‹</button>
+    <input id="sliceSlider" type="range" min="0" max="0" value="0" disabled>
+    <button id="nextBtn" aria-label="Imagen siguiente">›</button>
+    <span id="sliceLabel">0 / 0</span>
+  </div>
+</section>
+</main>
+<footer class="statusbar"><span><i class="status-dot"></i><span id="statusText">Listo · procesamiento local</span></span><span id="fileInfo">Sin estudio cargado</span></footer>
+</div>
+<div id="loading" class="loading hidden"><div class="loading-card"><div class="spinner"></div><div id="loadingText">Preparando estudio…</div><small>Procesamiento local en este dispositivo</small></div></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
