@@ -3,7 +3,6 @@ import * as cornerstoneTools from '@cornerstonejs/tools';
 import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
 import dicomParser from 'dicom-parser';
 import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
-import './style.css';
 
 const { RenderingEngine, Enums } = cornerstone;
 const {
