@@ -132,7 +132,7 @@ function parseBasic(file, buffer) {
     const seriesInstanceUID = get('x0020000e');
     const modality = get('x00080060');
     const rows = Number(get('x00280010')) || 0;
-    const columns = Number(get('x00280011')) || 0);
+    const columns = Number(get('x00280011')) || 0;
 
     // A valid DICOM image may have no DICM preamble. Do not require it.
     const looksLikeDicom =
