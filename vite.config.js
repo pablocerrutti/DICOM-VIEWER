@@ -1,0 +1,2 @@
+import { defineConfig } from 'vite';
+export default defineConfig({base:'./',optimizeDeps:{exclude:['@cornerstonejs/dicom-image-loader'],include:['dicom-parser']},worker:{format:'es'},build:{target:'es2020'}});
