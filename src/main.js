@@ -1,7 +1,6 @@
 import * as cornerstone from '@cornerstonejs/core';
 import { init as dicomImageLoaderInit, wadouri } from '@cornerstonejs/dicom-image-loader';
 import dicomParser from 'dicom-parser';
-import { jsPDF } from 'jspdf';
 import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
 
 const { RenderingEngine, Enums } = cornerstone;
@@ -1206,6 +1205,8 @@ async function exportCurrentSeriesPdf() {
 
   try {
     setLoading(true, 'Preparando PDF de ' + total + ' cortes…');
+
+    const { jsPDF } = await import('jspdf');
 
     const pdf = new jsPDF({
       orientation,
