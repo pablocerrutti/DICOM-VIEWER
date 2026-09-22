@@ -13,7 +13,7 @@
     "@cornerstonejs/dicom-image-loader": "2.1.16",
     "@cornerstonejs/tools": "2.1.16",
     "dicom-parser": "1.8.21",
-    "filing": "0.1.2"
+    "libarchive-wasm": "1.2.0"
   },
   "devDependencies": {
     "vite": "6.1.0"
