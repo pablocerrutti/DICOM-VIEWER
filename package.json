@@ -12,8 +12,7 @@
     "@cornerstonejs/core": "2.1.16",
     "@cornerstonejs/dicom-image-loader": "2.1.16",
     "dicom-parser": "1.8.21",
-    "libarchive-wasm": "1.2.0",
-    "jspdf": "2.5.2"
+    "libarchive-wasm": "1.2.0"
   },
   "devDependencies": {
     "vite": "6.1.0"

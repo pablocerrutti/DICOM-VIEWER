@@ -17,7 +17,6 @@ const state = {
   cineTimer: null,
   cinePlaying: false,
   cineBusy: false,
-  exportingPdf: false,
   originalVOI: null,
   initialized: false,
   initPromise: null,
@@ -54,7 +53,6 @@ const el = {
   prevBtn: $('prevBtn'),
   nextBtn: $('nextBtn'),
   cineBtn: $('cineBtn'),
-  pdfBtn: $('pdfBtn'),
   loading: $('loading'),
   loadingText: $('loadingText'),
 };
@@ -1162,183 +1160,6 @@ function fullscreen() {
   }
 }
 
-function safePdfName(value) {
-  return String(value || 'serie')
-    .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80) || 'serie';
-}
-
-function waitForRender() {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
-
-async function exportCurrentSeriesPdf() {
-  if (!state.imageIds.length || !state.viewport || !state.series.length) {
-    alert('Primero cargue un estudio DICOM y seleccione una serie.');
-    return;
-  }
-
-  if (state.exportingPdf) return;
-
-  state.exportingPdf = true;
-  stopCine();
-
-  const series = state.series[state.activeSeriesIndex];
-  const originalIndex = state.currentIndex;
-  const originalZoom = state.viewport.getZoom?.() || 1;
-  const originalPan = state.viewport.getPan?.()
-    ? [...state.viewport.getPan()]
-    : [0, 0];
-  const originalInvert = Boolean(state.viewport.getProperties().invert);
-  const originalVOI = state.viewport.getProperties().voiRange
-    ? { ...state.viewport.getProperties().voiRange }
-    : null;
-
-  const total = state.imageIds.length;
-  const orientation =
-    (series?.plane === 'AXIAL' || series?.plane === 'CORONAL')
-      ? 'landscape'
-      : 'portrait';
-
-  try {
-    setLoading(true, 'Preparando PDF de ' + total + ' cortes…');
-
-    const { jsPDF } = await import('jspdf');
-
-    const pdf = new jsPDF({
-      orientation,
-      unit: 'mm',
-      format: 'a4',
-      compress: true,
-    });
-
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 10;
-    const headerHeight = 14;
-    const footerHeight = 8;
-    let addedPage = false;
-
-    for (let i = 0; i < total; i++) {
-      setLoading(
-        true,
-        'Generando PDF · corte ' + (i + 1) + ' de ' + total + '…'
-      );
-
-      await state.viewport.setImageIdIndex(i);
-      state.viewport.render();
-      await waitForRender();
-
-      const canvas = el.viewport.querySelector('canvas');
-      if (!canvas || !canvas.width || !canvas.height) {
-        throw new Error('No se pudo obtener la imagen del corte ' + (i + 1) + '.');
-      }
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      const imageRatio = canvas.width / canvas.height;
-
-      const maxWidth = pageWidth - margin * 2;
-      const maxHeight = pageHeight - margin * 2 - headerHeight - footerHeight;
-
-      let imageWidth = maxWidth;
-      let imageHeight = imageWidth / imageRatio;
-
-      if (imageHeight > maxHeight) {
-        imageHeight = maxHeight;
-        imageWidth = imageHeight * imageRatio;
-      }
-
-      const x = (pageWidth - imageWidth) / 2;
-      const y = margin + headerHeight + (maxHeight - imageHeight) / 2;
-
-      if (addedPage) pdf.addPage();
-      addedPage = true;
-
-      const meta = state.imageMeta[i] || {};
-
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.text(
-        'DICOM VIEWER · ' +
-          (series.plane || 'SERIE') +
-          ' · ' +
-          (series.description || 'Sin descripción'),
-        margin,
-        margin + 4
-      );
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(7.5);
-      pdf.text(
-        'Paciente: ' +
-          (meta.patientName || '—') +
-          '    Estudio: ' +
-          (meta.studyDescription || '—'),
-        margin,
-        margin + 9
-      );
-
-      pdf.addImage(dataUrl, 'JPEG', x, y, imageWidth, imageHeight);
-
-      pdf.setFontSize(7);
-      pdf.text(
-        'Corte ' + (i + 1) + ' / ' + total,
-        margin,
-        pageHeight - margin + 1
-      );
-      pdf.text(
-        'Serie ' + (series.seriesNumber || '—') +
-          ' · Modalidad ' + (series.modality || '—'),
-        pageWidth - margin,
-        pageHeight - margin + 1,
-        { align: 'right' }
-      );
-    }
-
-    const patient = safePdfName(state.imageMeta[0]?.patientName);
-    const plane = safePdfName(series.plane || 'SERIE');
-    const description = safePdfName(series.description || 'DICOM');
-    pdf.save('DICOM_' + patient + '_' + plane + '_' + description + '.pdf');
-
-    setStatus(
-      'PDF generado · ' +
-        (series.plane || 'Serie') +
-        ' · ' +
-        total +
-        ' cortes.'
-    );
-  } catch (error) {
-    console.error('Error generando PDF:', error);
-    alert(
-      'No se pudo generar el PDF.\n\nDetalle: ' +
-        (error?.message || 'Error desconocido.')
-    );
-  } finally {
-    try {
-      await state.viewport.setImageIdIndex(originalIndex);
-      state.viewport.setProperties({ invert: originalInvert });
-
-      if (originalVOI) {
-        state.viewport.setProperties({ voiRange: originalVOI });
-      }
-
-      state.viewport.setZoom(originalZoom);
-      state.viewport.setPan(originalPan);
-      state.viewport.render();
-      updateSlice();
-      updateViewport();
-    } catch (restoreError) {
-      console.warn('No se pudo restaurar la vista después del PDF:', restoreError);
-    }
-
-    state.exportingPdf = false;
-    setLoading(false);
-  }
-}
-
 function stopCine() {
   state.cinePlaying = false;
   state.cineBusy = false;
@@ -1372,68 +1193,35 @@ function cine() {
   }, 110);
 }
 
-function openFilePicker(input) {
-  if (!input) return;
+el.openFilesBtn.onclick = () => el.fileInput.click();
+el.openFolderBtn.onclick = () => el.folderInput.click();
 
-  try {
-    if (typeof input.showPicker === 'function') {
-      input.showPicker();
-    } else {
-      input.click();
-    }
-  } catch (error) {
-    // Algunos navegadores bloquean showPicker() en ciertos contextos;
-    // click() sigue siendo el método compatible para input[type=file].
-    try {
-      input.click();
-    } catch (fallbackError) {
-      console.error('No se pudo abrir el selector de archivos:', error, fallbackError);
-    }
-  }
-}
-
-el.openFilesBtn?.addEventListener('click', event => {
-  event.preventDefault();
-  openFilePicker(el.fileInput);
-});
-
-el.openFolderBtn?.addEventListener('click', event => {
-  event.preventDefault();
-  openFilePicker(el.folderInput);
-});
-
-el.fileInput?.addEventListener('change', event => {
-  const files = event.target.files;
-  if (files?.length) loadFiles(files);
+el.fileInput.onchange = event => {
+  loadFiles(event.target.files);
   event.target.value = '';
-});
+};
 
-el.folderInput?.addEventListener('change', event => {
-  const files = event.target.files;
-  if (files?.length) loadFiles(files);
+el.folderInput.onchange = event => {
+  loadFiles(event.target.files);
   event.target.value = '';
-});
+};
 
-el.sliceSlider?.addEventListener('input', event => setSlice(Number(event.target.value)));
-el.prevBtn?.addEventListener('click', () => setSlice(state.currentIndex - 1));
-el.nextBtn?.addEventListener('click', () => setSlice(state.currentIndex + 1));
-el.cineBtn?.addEventListener('click', cine);
-el.pdfBtn?.addEventListener('click', exportCurrentSeriesPdf);
+el.sliceSlider.oninput = event => setSlice(Number(event.target.value));
+el.prevBtn.onclick = () => setSlice(state.currentIndex - 1);
+el.nextBtn.onclick = () => setSlice(state.currentIndex + 1);
+el.cineBtn.onclick = cine;
 
 document.querySelectorAll('.toolbar button[data-action]').forEach(button => {
-  const actions = {
-    reset,
-    invert,
-    zoomIn: () => zoom(1.2),
-    zoomOut: () => zoom(1 / 1.2),
-    fit,
-    fullscreen,
-    cine,
-    pdf: exportCurrentSeriesPdf,
-  };
-
-  const action = actions[button.dataset.action];
-  if (action) button.addEventListener('click', action);
+  button.onclick = () =>
+    ({
+      reset,
+      invert,
+      zoomIn: () => zoom(1.2),
+      zoomOut: () => zoom(1 / 1.2),
+      fit,
+      fullscreen,
+      cine,
+    }[button.dataset.action])();
 });
 
 document.onkeydown = event => {
