@@ -334,19 +334,89 @@ function setupViewportInteractions() {
   });
 }
 
+function medicalPlaneFromText(text) {
+  const value = String(text || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+
+  if (!value) return null;
+
+  if (
+    /(^| )3 ?PLANE(S)?( |$)/.test(value) ||
+    /(^| )3P( |$)/.test(value) ||
+    value.includes('THREE PLANE') ||
+    value.includes('3 PLANES')
+  ) {
+    return '3-PLANE';
+  }
+
+  if (
+    value.includes('LOCALIZER') ||
+    value.includes('SCOUT') ||
+    value.includes('TOPOGRAM') ||
+    value.includes('TOPO') ||
+    /(^| )LOC( |$)/.test(value)
+  ) {
+    return 'LOCALIZADOR';
+  }
+
+  if (
+    value.includes('SAGITTAL') ||
+    /(^| )SAG( |$)/.test(value)
+  ) {
+    return 'SAGITTAL';
+  }
+
+  if (
+    value.includes('CORONAL') ||
+    /(^| )COR( |$)/.test(value)
+  ) {
+    return 'CORONAL';
+  }
+
+  if (
+    value.includes('AXIAL') ||
+    value.includes('TRANSVERSE') ||
+    /(^| )AX( |$)/.test(value) ||
+    /(^| )TRA( |$)/.test(value)
+  ) {
+    return 'AXIAL';
+  }
+
+  if (
+    value.includes('OBLIQUE') ||
+    /(^| )OBL( |$)/.test(value)
+  ) {
+    return 'OBLICUO';
+  }
+
+  return null;
+}
+
 function planeFamily(meta) {
+  const fromText =
+    medicalPlaneFromText(meta.seriesDescription) ||
+    medicalPlaneFromText(meta.imageType);
+
+  if (fromText && fromText !== '3-PLANE' && fromText !== 'LOCALIZADOR') {
+    return fromText;
+  }
+
   const imageType = Array.isArray(meta.imageTypeValues)
     ? meta.imageTypeValues
     : [];
 
-  if (imageType.includes('AXIAL')) return 'AXIAL';
+  if (imageType.includes('AXIAL') || imageType.includes('TRANSVERSE')) return 'AXIAL';
   if (imageType.includes('SAGITTAL')) return 'SAGITTAL';
   if (imageType.includes('CORONAL')) return 'CORONAL';
+  if (imageType.includes('OBLIQUE')) return 'OBLICUO';
+  if (fromText) return fromText;
 
   const o = meta.imageOrientationPatient;
 
   if (!Array.isArray(o) || o.length < 6) {
-    return 'NO_ORIENTATION';
+    return 'OTRO';
   }
 
   const row = o.slice(0, 3).map(Number);
@@ -360,21 +430,34 @@ function planeFamily(meta) {
 
   const length = Math.hypot(normal[0], normal[1], normal[2]);
 
-  if (!Number.isFinite(length) || length < 1e-8) {
-    return 'NO_ORIENTATION';
-  }
+  if (!Number.isFinite(length) || length < 1e-8) return 'OTRO';
 
   const nx = Math.abs(normal[0] / length);
   const ny = Math.abs(normal[1] / length);
   const nz = Math.abs(normal[2] / length);
 
   if (nz >= nx && nz >= ny && nz >= 0.85) return 'AXIAL';
-  if (ny >= nx && ny >= nz && ny >= 0.85) return 'CORONAL';
   if (nx >= ny && nx >= nz && nx >= 0.85) return 'SAGITTAL';
+  if (ny >= nx && ny >= nz && ny >= 0.85) return 'CORONAL';
 
-  return 'OBLIQUE';
+  return 'OBLICUO';
 }
 
+function medicalPlaneForSeries(series) {
+  const descriptionPlane = medicalPlaneFromText(series.description);
+  if (descriptionPlane) return descriptionPlane;
+
+  const counts = {};
+  for (const item of series.images) {
+    const plane = planeFamily(item.meta);
+    counts[plane] = (counts[plane] || 0) + 1;
+  }
+
+  return (
+    Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+    'OTRO'
+  );
+}
 
 function buildScanNormal(referenceMeta) {
   const o = referenceMeta?.imageOrientationPatient;
