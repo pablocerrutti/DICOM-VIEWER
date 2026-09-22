@@ -8,7 +8,7 @@ const { RenderingEngine, Enums } = cornerstone;
 const {
   MouseBindings,
   ToolGroupManager,
-  StackScrollMouseWheelTool,
+  StackScrollTool,
   PanTool,
   ZoomTool,
   WindowLevelTool,
@@ -183,7 +183,7 @@ async function init() {
     strict: false,
   });
 
-  [WindowLevelTool, PanTool, ZoomTool, StackScrollMouseWheelTool].forEach(addTool);
+  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(addTool);
 
   state.renderingEngine = new RenderingEngine(RENDERING_ENGINE_ID);
   state.renderingEngine.enableElement({
@@ -196,7 +196,7 @@ async function init() {
   state.viewport = state.renderingEngine.getViewport(VIEWPORT_ID);
 
   state.toolGroup = ToolGroupManager.createToolGroup('DICOM_TOOL_GROUP');
-  [WindowLevelTool, PanTool, ZoomTool, StackScrollMouseWheelTool].forEach(tool =>
+  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(tool =>
     state.toolGroup.addTool(tool.toolName)
   );
 
@@ -210,7 +210,9 @@ async function init() {
   state.toolGroup.setToolActive(ZoomTool.toolName, {
     bindings: [{ mouseButton: MouseBindings.Secondary }],
   });
-  state.toolGroup.setToolActive(StackScrollMouseWheelTool.toolName);
+  state.toolGroup.setToolActive(StackScrollTool.toolName, {
+    bindings: [{ mouseButton: MouseBindings.Wheel }],
+  });
 
   el.viewport.addEventListener('contextmenu', event => event.preventDefault());
 
