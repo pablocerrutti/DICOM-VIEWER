@@ -168,7 +168,7 @@ async function init() {
   state.initPromise = (async () => {
     await cornerstone.init();
 
-    dicomImageLoaderInit({
+    await dicomImageLoaderInit({
       maxWebWorkers: Math.max(
         1,
         Math.min(4, navigator.hardwareConcurrency || 2)
@@ -667,6 +667,12 @@ async function setSeries(index) {
 
   state.files = series.images.map(item => item.file);
   state.imageMeta = series.images.map(item => item.meta);
+
+  try {
+    wadouri.fileManager.purge();
+  } catch (error) {
+    console.debug('No se pudo limpiar el caché de archivos DICOM:', error);
+  }
   state.imageIds = state.files.map(file =>
     wadouri.fileManager.add(file)
   );
