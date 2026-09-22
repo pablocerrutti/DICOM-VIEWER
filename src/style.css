@@ -62,6 +62,8 @@ radial-gradient(900px 500px at 75% -10%,#123a48 0,transparent 65%),#03080c}
 .badge{padding:4px 8px;border-radius:99px;background:#0c2b35;color:#79e4ec;border:1px solid #205966;font-size:9px}
 
 .series-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.series-group-title{margin:12px 4px 4px;padding:6px 8px;border-bottom:1px solid #183541;color:#78939d;font-size:8px;font-weight:800;letter-spacing:.17em}
+.series-group-title:first-child{margin-top:0}
 .series-item{
  display:grid;grid-template-columns:44px 1fr;gap:10px;padding:9px;border:1px solid transparent;
  border-radius:10px;cursor:pointer;transition:.16s;
