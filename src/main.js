@@ -298,11 +298,34 @@ function buildSeries(parsed) {
 }
 
 async function getArchiveModule() {
-  if (!state.archiveModule) {
-    setLoading(true, 'Preparando lector de archivos ZIP/RAR…');
-    state.archiveModule = await libarchiveWasm();
+  if (state.archiveModule) return state.archiveModule;
+
+  setLoading(true, 'Preparando lector ZIP/RAR…');
+
+  const wasmUrl =
+    'https://cdn.jsdelivr.net/npm/libarchive-wasm@1.2.0/dist/libarchive.wasm';
+
+  try {
+    const loadPromise = libarchiveWasm({
+      locateFile: () => wasmUrl,
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('El lector ZIP/RAR tardó demasiado en inicializar.')),
+        20000
+      )
+    );
+
+    state.archiveModule = await Promise.race([loadPromise, timeoutPromise]);
+    return state.archiveModule;
+  } catch (error) {
+    state.archiveModule = null;
+    console.error('Error inicializando lector ZIP/RAR:', error);
+    throw new Error(
+      'No se pudo iniciar el lector de archivos comprimidos. Compruebe su conexión a Internet e inténtelo nuevamente.'
+    );
   }
-  return state.archiveModule;
 }
 
 function isArchiveFile(file) {
@@ -359,6 +382,12 @@ async function normalizeInput(list) {
     if (isArchiveFile(file)) {
       setLoading(true, 'Abriendo archivo ' + file.name + '…');
       const extracted = await extractArchive(file);
+
+      if (!extracted.length) {
+        throw new Error(
+          'El archivo comprimido no contiene archivos que el visor pueda extraer.'
+        );
+      }
 
       for (const extractedFile of extracted) {
         try {
