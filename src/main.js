@@ -2,7 +2,7 @@ import * as cornerstone from '@cornerstonejs/core';
 import * as cornerstoneTools from '@cornerstonejs/tools';
 import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
 import dicomParser from 'dicom-parser';
-import { FilingBrowser } from 'filing';
+import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
 
 const { RenderingEngine, Enums } = cornerstone;
 const {
@@ -30,7 +30,7 @@ const state = {
   cineBusy: false,
   originalVOI: null,
   initialized: false,
-  archiveExtractor: null,
+  archiveModule: null,
 };
 
 const $ = id => document.getElementById(id);
@@ -175,6 +175,7 @@ async function init() {
   await cornerstone.init();
   cornerstoneTools.init();
 
+  dicomImageLoader.external = dicomImageLoader.external || {};
   dicomImageLoader.external.cornerstone = cornerstone;
   dicomImageLoader.external.dicomParser = dicomParser;
   dicomImageLoader.init({
@@ -297,42 +298,33 @@ function buildSeries(parsed) {
   );
 }
 
-async function getArchiveExtractor() {
-  if (state.archiveExtractor) return state.archiveExtractor;
+async function getArchiveModule() {
+  if (state.archiveModule) return state.archiveModule;
 
   setLoading(true, 'Preparando lector ZIP/RAR…');
 
   const wasmUrl =
-    'https://unpkg.com/filing@0.1.2/dist/esm/wasm/archive.wasm';
+    'https://cdn.jsdelivr.net/npm/libarchive-wasm@1.2.0/dist/libarchive.wasm';
 
   try {
-    state.archiveExtractor = new FilingBrowser({
-      wasmUrl,
-      onInitialFailed: error => {
-        console.error('Error inicializando lector ZIP/RAR:', error);
-      },
+    const loadPromise = libarchiveWasm({
+      locateFile: () => wasmUrl,
     });
 
-    // Filing inicializa el motor al primer extract(). Dejamos un límite
-    // explícito para evitar que la interfaz quede indefinidamente cargando.
-    const readyTimeout = new Promise((_, reject) =>
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error('El lector ZIP/RAR tardó demasiado en inicializar.')),
         20000
       )
     );
 
-    await Promise.race([
-      state.archiveExtractor.initialized,
-      readyTimeout,
-    ]);
-
-    return state.archiveExtractor;
+    state.archiveModule = await Promise.race([loadPromise, timeoutPromise]);
+    return state.archiveModule;
   } catch (error) {
-    state.archiveExtractor = null;
+    state.archiveModule = null;
     console.error('Error inicializando lector ZIP/RAR:', error);
     throw new Error(
-      'No se pudo iniciar el lector ZIP/RAR. Compruebe que el navegador tenga acceso a Internet para descargar el componente de extracción.'
+      'No se pudo iniciar el lector de archivos comprimidos. Compruebe su conexión a Internet e inténtelo nuevamente.'
     );
   }
 }
@@ -349,33 +341,43 @@ function isArchiveFile(file) {
 }
 
 async function extractArchive(file) {
-  const extractor = await getArchiveExtractor();
+  const module = await getArchiveModule();
+  const data = new Uint8Array(await file.arrayBuffer());
+  const reader = new ArchiveReader(module, data);
+  const extracted = [];
 
   try {
-    const entries = await extractor.extract(file);
-    const extracted = [];
+    for (const entry of reader.entries()) {
+      const pathname = entry.getPathname?.() || '';
+      const size = Number(entry.getSize?.() || 0);
 
-    for (const entry of entries || []) {
-      if (!entry || !entry.file || entry.file.size <= 0) continue;
+      if (!pathname || pathname.endsWith('/') || size <= 0) continue;
 
-      const extractedFile = entry.file;
       try {
-        Object.defineProperty(extractedFile, 'webkitRelativePath', {
-          value: file.name + '/' + (entry.pathname || entry.filename || extractedFile.name),
+        const bytes = entry.readData();
+        if (!bytes?.length) continue;
+
+        const filename = pathname.split('/').pop() || 'dicom';
+        const extractedFile = new File([new Uint8Array(bytes)], filename, {
+          type: 'application/dicom',
         });
-      } catch {}
 
-      extracted.push(extractedFile);
+        try {
+          Object.defineProperty(extractedFile, 'webkitRelativePath', {
+            value: file.name + '/' + pathname,
+          });
+        } catch {}
+
+        extracted.push(extractedFile);
+      } catch (error) {
+        console.warn('No se pudo extraer', pathname, error);
+      }
     }
-
-    return extracted;
-  } catch (error) {
-    console.error('Error extrayendo archivo comprimido:', error);
-    throw new Error(
-      'No se pudo extraer el archivo comprimido. ' +
-      (error?.message ? error.message : 'El formato puede estar dañado, protegido o dividido en volúmenes.')
-    );
+  } finally {
+    reader.free();
   }
+
+  return extracted;
 }
 
 
