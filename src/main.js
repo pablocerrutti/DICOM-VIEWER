@@ -1372,37 +1372,68 @@ function cine() {
   }, 110);
 }
 
-el.openFilesBtn.onclick = () => el.fileInput.click();
-el.openFolderBtn.onclick = () => el.folderInput.click();
+function openFilePicker(input) {
+  if (!input) return;
 
-el.fileInput.onchange = event => {
-  loadFiles(event.target.files);
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    } else {
+      input.click();
+    }
+  } catch (error) {
+    // Algunos navegadores bloquean showPicker() en ciertos contextos;
+    // click() sigue siendo el método compatible para input[type=file].
+    try {
+      input.click();
+    } catch (fallbackError) {
+      console.error('No se pudo abrir el selector de archivos:', error, fallbackError);
+    }
+  }
+}
+
+el.openFilesBtn?.addEventListener('click', event => {
+  event.preventDefault();
+  openFilePicker(el.fileInput);
+});
+
+el.openFolderBtn?.addEventListener('click', event => {
+  event.preventDefault();
+  openFilePicker(el.folderInput);
+});
+
+el.fileInput?.addEventListener('change', event => {
+  const files = event.target.files;
+  if (files?.length) loadFiles(files);
   event.target.value = '';
-};
+});
 
-el.folderInput.onchange = event => {
-  loadFiles(event.target.files);
+el.folderInput?.addEventListener('change', event => {
+  const files = event.target.files;
+  if (files?.length) loadFiles(files);
   event.target.value = '';
-};
+});
 
-el.sliceSlider.oninput = event => setSlice(Number(event.target.value));
-el.prevBtn.onclick = () => setSlice(state.currentIndex - 1);
-el.nextBtn.onclick = () => setSlice(state.currentIndex + 1);
-el.cineBtn.onclick = cine;
-el.pdfBtn.onclick = exportCurrentSeriesPdf;
+el.sliceSlider?.addEventListener('input', event => setSlice(Number(event.target.value)));
+el.prevBtn?.addEventListener('click', () => setSlice(state.currentIndex - 1));
+el.nextBtn?.addEventListener('click', () => setSlice(state.currentIndex + 1));
+el.cineBtn?.addEventListener('click', cine);
+el.pdfBtn?.addEventListener('click', exportCurrentSeriesPdf);
 
 document.querySelectorAll('.toolbar button[data-action]').forEach(button => {
-  button.onclick = () =>
-    ({
-      reset,
-      invert,
-      zoomIn: () => zoom(1.2),
-      zoomOut: () => zoom(1 / 1.2),
-      fit,
-      fullscreen,
-      cine,
-      pdf: exportCurrentSeriesPdf,
-    }[button.dataset.action])();
+  const actions = {
+    reset,
+    invert,
+    zoomIn: () => zoom(1.2),
+    zoomOut: () => zoom(1 / 1.2),
+    fit,
+    fullscreen,
+    cine,
+    pdf: exportCurrentSeriesPdf,
+  };
+
+  const action = actions[button.dataset.action];
+  if (action) button.addEventListener('click', action);
 });
 
 document.onkeydown = event => {
