@@ -523,11 +523,10 @@ function buildSeries(parsed) {
   for (const item of parsed) {
     const meta = item.meta;
 
-    // SeriesInstanceUID es el identificador principal de la secuencia.
-    // Solo subdividimos si dentro de una misma serie hay planos anatómicos
-    // realmente distintos. No separamos por adquisición, eco o tiempo,
-    // porque eso fragmentaría innecesariamente una misma secuencia.
-    const baseSeriesKey =
+    // SeriesInstanceUID identifica la serie DICOM real.
+    // El plano médico se usa para organizar visualmente el listado,
+    // pero nunca para romper una serie en varias pilas.
+    const key =
       meta.seriesInstanceUID ||
       'NO_UID|' +
         meta.seriesNumber +
@@ -535,11 +534,6 @@ function buildSeries(parsed) {
         meta.modality +
         '|' +
         meta.seriesDescription;
-
-    const key =
-      baseSeriesKey +
-      '|PLANE|' +
-      planeFamily(meta);
 
     if (!map.has(key)) {
       map.set(key, {
@@ -549,7 +543,7 @@ function buildSeries(parsed) {
         seriesNumber: meta.seriesNumber,
         description: meta.seriesDescription,
         modality: meta.modality,
-        plane: planeFamily(meta),
+        plane: null,
         images: [],
       });
     }
@@ -558,7 +552,10 @@ function buildSeries(parsed) {
   }
 
   const series = [...map.values()];
-  series.forEach(seriesItem => sortImages(seriesItem.images));
+  series.forEach(seriesItem => {
+    sortImages(seriesItem.images);
+    seriesItem.plane = medicalPlaneForSeries(seriesItem);
+  });
 
   return series.sort((a, b) => {
     const numberDiff =
@@ -898,41 +895,84 @@ function updateList() {
     return;
   }
 
+  const groupOrder = [
+    '3-PLANE',
+    'SAGITTAL',
+    'AXIAL',
+    'CORONAL',
+    'OBLICUO',
+    'LOCALIZADOR',
+    'OTRO',
+  ];
+
+  const groupTitles = {
+    '3-PLANE': '3-PLANE',
+    SAGITTAL: 'SAGITTAL',
+    AXIAL: 'AXIAL',
+    CORONAL: 'CORONAL',
+    OBLICUO: 'OBLICUO',
+    LOCALIZADOR: 'LOCALIZADOR / SCOUT',
+    OTRO: 'OTRAS SERIES',
+  };
+
+  const groups = new Map(groupOrder.map(key => [key, []]));
+
   state.series.forEach((series, index) => {
-    const item = document.createElement('div');
-    item.className =
-      'series-item ' + (index === state.activeSeriesIndex ? 'active' : '');
-
-    const title =
-      series.description && series.description !== '—'
-        ? series.description
-        : 'Serie ' + (series.seriesNumber || index + 1);
-
-    item.innerHTML =
-      '<div class="thumb">' +
-      String(index + 1).padStart(2, '0') +
-      '</div>' +
-      '<div>' +
-      '<div class="series-name">' +
-      esc(title) +
-      '</div>' +
-      '<div class="series-sub">Serie ' +
-      esc(series.seriesNumber || index + 1) +
-      ' · ' +
-      esc(series.modality || 'DICOM') +
-      ' · ' +
-      series.images.length +
-      ' imágenes</div>' +
-      '</div>';
-
-    item.onclick = () => setSeries(index);
-    el.seriesList.appendChild(item);
+    const plane = groups.has(series.plane) ? series.plane : 'OTRO';
+    groups.get(plane).push({ series, index });
   });
+
+  for (const groupKey of groupOrder) {
+    const entries = groups.get(groupKey);
+    if (!entries.length) continue;
+
+    const header = document.createElement('div');
+    header.className = 'series-group-title';
+    header.textContent = groupTitles[groupKey];
+    el.seriesList.appendChild(header);
+
+    entries.forEach(({ series, index }) => {
+      const item = document.createElement('div');
+      item.className =
+        'series-item ' + (index === state.activeSeriesIndex ? 'active' : '');
+      item.dataset.seriesIndex = String(index);
+
+      const title =
+        series.description && series.description !== '—'
+          ? series.description
+          : 'Serie ' + (series.seriesNumber || index + 1);
+
+      item.innerHTML =
+        '<div class="thumb">' +
+        String(index + 1).padStart(2, '0') +
+        '</div>' +
+        '<div>' +
+        '<div class="series-name">' +
+        esc(title) +
+        '</div>' +
+        '<div class="series-sub">Serie ' +
+        esc(series.seriesNumber || index + 1) +
+        ' · ' +
+        esc(series.modality || 'DICOM') +
+        ' · ' +
+        series.images.length +
+        ' imágenes</div>' +
+        '</div>';
+
+      item.onclick = () => setSeries(index);
+      el.seriesList.appendChild(item);
+    });
+  }
 }
 
 function updateSeriesListSelection() {
-  [...el.seriesList.children].forEach((item, index) =>
-    item.classList.toggle('active', index === state.activeSeriesIndex)
+  const items = [...el.seriesList.querySelectorAll('.series-item')];
+
+  items.forEach(item =>
+    item.classList.toggle(
+      'active',
+      Number(item.dataset.seriesIndex) === state.activeSeriesIndex
+    )
   );
 }
 
