@@ -176,17 +176,13 @@ async function init() {
   if (state.initPromise) return state.initPromise;
 
   state.initPromise = (async () => {
-  await cornerstoneInit();
+  await cornerstone.init();
   await cornerstoneToolsInit();
 
   dicomImageLoader.external = dicomImageLoader.external || {};
-  dicomImageLoader.external = dicomImageLoader.external || {};
-  dicomImageLoader.external.cornerstone = {
-    ...dicomImageLoader.external.cornerstone,
-    RenderingEngine,
-  };
+  dicomImageLoader.external.cornerstone = cornerstone;
   dicomImageLoader.external.dicomParser = dicomParser;
-  await dicomImageLoaderInit({
+  dicomImageLoader.init({
     maxWebWorkers: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)),
     strict: false,
   });
