@@ -208,15 +208,18 @@ async function init() {
   }
 
   [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(tool => {
-    try {
+    if (!state.toolGroup.hasTool(tool.toolName)) {
       state.toolGroup.addTool(tool.toolName);
-    } catch (error) {
-      // Si el grupo ya contenía la herramienta, no es un error fatal.
-      console.debug('Herramienta ya registrada:', tool.toolName, error);
     }
   });
 
-  state.toolGroup.addViewport(VIEWPORT_ID, RENDERING_ENGINE_ID);
+  if (
+    !state.toolGroup
+      .getViewportIds()
+      .includes(VIEWPORT_ID)
+  ) {
+    state.toolGroup.addViewport(VIEWPORT_ID, RENDERING_ENGINE_ID);
+  }
   state.toolGroup.setToolActive(WindowLevelTool.toolName, {
     bindings: [{ mouseButton: MouseBindings.Primary }],
   });
@@ -456,17 +459,16 @@ function dedupe(parsed) {
 }
 
 async function loadFiles(list) {
-  const candidates = await normalizeInput(list);
-
-  if (!candidates.length) {
-    setStatus('No se encontraron archivos.');
-    return;
-  }
-
   stopCine();
-  setLoading(true, 'Analizando estudio…');
+  setLoading(true, 'Preparando estudio…');
 
   try {
+    const candidates = await normalizeInput(list);
+
+    if (!candidates.length) {
+      setStatus('No se encontraron archivos.');
+      return;
+    }
     await init();
 
     const parsed = [];
@@ -524,11 +526,11 @@ async function loadFiles(list) {
   } catch (error) {
     console.error(error);
     setStatus('Error al cargar el estudio.');
-    const detail = error?.message ? '\\n\\nDetalle: ' + error.message : '';
+    const detail = error?.message ? '\n\nDetalle: ' + error.message : '';
     alert(
       'No se pudo abrir el estudio.' +
         detail +
-        '\\n\\nSi es ZIP/RAR, compruebe que no esté protegido con contraseña o dividido en varios volúmenes.'
+        '\n\nSi es ZIP/RAR, compruebe que no esté protegido con contraseña o dividido en varios volúmenes.'
     );
   } finally {
     setLoading(false);
