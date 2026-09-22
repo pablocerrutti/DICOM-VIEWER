@@ -150,6 +150,10 @@ function parseBasic(file, buffer) {
       temporalPositionIdentifier: Number(get('x00200100')) || 0,
       frameOfReferenceUID: get('x00200052'),
       imageType: clean(get('x00080008')),
+      imageTypeValues: get('x00080008')
+        .split('\\')
+        .map(value => String(value || '').trim().toUpperCase())
+        .filter(Boolean),
       seriesInstanceUID,
       studyInstanceUID,
       sopInstanceUID,
@@ -330,14 +334,45 @@ function setupViewportInteractions() {
   });
 }
 
-function orientationKey(meta) {
-  const o = meta.imageOrientationPatient;
-  if (!Array.isArray(o) || o.length < 6) return 'NO_ORIENTATION';
+function planeFamily(meta) {
+  const imageType = Array.isArray(meta.imageTypeValues)
+    ? meta.imageTypeValues
+    : [];
 
-  return o
-    .slice(0, 6)
-    .map(value => Math.round(Number(value) * 100000) / 100000)
-    .join(',');
+  if (imageType.includes('AXIAL')) return 'AXIAL';
+  if (imageType.includes('SAGITTAL')) return 'SAGITTAL';
+  if (imageType.includes('CORONAL')) return 'CORONAL';
+
+  const o = meta.imageOrientationPatient;
+
+  if (!Array.isArray(o) || o.length < 6) {
+    return 'NO_ORIENTATION';
+  }
+
+  const row = o.slice(0, 3).map(Number);
+  const col = o.slice(3, 6).map(Number);
+
+  const normal = [
+    row[1] * col[2] - row[2] * col[1],
+    row[2] * col[0] - row[0] * col[2],
+    row[0] * col[1] - row[1] * col[0],
+  ];
+
+  const length = Math.hypot(normal[0], normal[1], normal[2]);
+
+  if (!Number.isFinite(length) || length < 1e-8) {
+    return 'NO_ORIENTATION';
+  }
+
+  const nx = Math.abs(normal[0] / length);
+  const ny = Math.abs(normal[1] / length);
+  const nz = Math.abs(normal[2] / length);
+
+  if (nz >= nx && nz >= ny && nz >= 0.85) return 'AXIAL';
+  if (ny >= nx && ny >= nz && ny >= 0.85) return 'CORONAL';
+  if (nx >= ny && nx >= nz && nx >= 0.85) return 'SAGITTAL';
+
+  return 'OBLIQUE';
 }
 
 function dimensionsKey(meta) {
@@ -421,6 +456,20 @@ function sortImages(images) {
       const aa = a.item.meta;
       const bb = b.item.meta;
 
+      if (
+        (aa.temporalPositionIdentifier || 0) !==
+        (bb.temporalPositionIdentifier || 0)
+      ) {
+        return (
+          (aa.temporalPositionIdentifier || 0) -
+          (bb.temporalPositionIdentifier || 0)
+        );
+      }
+
+      if ((aa.acquisitionNumber || 0) !== (bb.acquisitionNumber || 0)) {
+        return (aa.acquisitionNumber || 0) - (bb.acquisitionNumber || 0);
+      }
+
       if ((aa.instanceNumber || 0) !== (bb.instanceNumber || 0)) {
         return (aa.instanceNumber || 0) - (bb.instanceNumber || 0);
       }
@@ -475,18 +524,10 @@ function buildSeries(parsed) {
 
     const key =
       baseSeriesKey +
-      '|FRAME|' +
-      (meta.frameOfReferenceUID || 'NO_FRAME') +
       '|PLANE|' +
-      orientationKey(meta) +
+      planeFamily(meta) +
       '|SIZE|' +
-      dimensionsKey(meta) +
-      '|ACQ|' +
-      (meta.acquisitionNumber || 0) +
-      '|ECHO|' +
-      (meta.echoNumber || 0) +
-      '|TIME|' +
-      (meta.temporalPositionIdentifier || 0);
+      dimensionsKey(meta);
 
     if (!map.has(key)) {
       map.set(key, {
@@ -496,6 +537,7 @@ function buildSeries(parsed) {
         seriesNumber: meta.seriesNumber,
         description: meta.seriesDescription,
         modality: meta.modality,
+        plane: planeFamily(meta),
         images: [],
       });
     }
