@@ -30,6 +30,7 @@ const state = {
   cineBusy: false,
   originalVOI: null,
   initialized: false,
+  initPromise: null,
   archiveModule: null,
 };
 
@@ -171,7 +172,9 @@ function parseBasic(file, buffer) {
 
 async function init() {
   if (state.initialized) return;
+  if (state.initPromise) return state.initPromise;
 
+  state.initPromise = (async () => {
   await cornerstone.init();
   cornerstoneTools.init();
 
@@ -195,10 +198,22 @@ async function init() {
 
   state.viewport = state.renderingEngine.getViewport(VIEWPORT_ID);
 
-  state.toolGroup = ToolGroupManager.createToolGroup('DICOM_TOOL_GROUP');
-  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(tool =>
-    state.toolGroup.addTool(tool.toolName)
-  );
+  state.toolGroup =
+    ToolGroupManager.getToolGroup('DICOM_TOOL_GROUP') ||
+    ToolGroupManager.createToolGroup('DICOM_TOOL_GROUP');
+
+  if (!state.toolGroup) {
+    throw new Error('No se pudo crear el grupo de herramientas de Cornerstone.');
+  }
+
+  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(tool => {
+    try {
+      state.toolGroup.addTool(tool.toolName);
+    } catch (error) {
+      // Si el grupo ya contenía la herramienta, no es un error fatal.
+      console.debug('Herramienta ya registrada:', tool.toolName, error);
+    }
+  });
 
   state.toolGroup.addViewport(VIEWPORT_ID, RENDERING_ENGINE_ID);
   state.toolGroup.setToolActive(WindowLevelTool.toolName, {
@@ -227,6 +242,14 @@ async function init() {
   }
 
   state.initialized = true;
+  })();
+
+  try {
+    await state.initPromise;
+  } catch (error) {
+    state.initPromise = null;
+    throw error;
+  }
 }
 
 function slicePosition(meta) {
