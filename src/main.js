@@ -1,19 +1,25 @@
-import * as cornerstone from '@cornerstonejs/core';
-import * as cornerstoneTools from '@cornerstonejs/tools';
-import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
-import dicomParser from 'dicom-parser';
-import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
-
-const { RenderingEngine, Enums } = cornerstone;
-const {
-  MouseBindings,
+import {
+  Enums as cornerstoneEnums,
+  RenderingEngine,
+  init as cornerstoneInit,
+} from '@cornerstonejs/core';
+import {
+  Enums as cornerstoneToolsEnums,
   ToolGroupManager,
   StackScrollTool,
   PanTool,
   ZoomTool,
   WindowLevelTool,
   addTool,
-} = cornerstoneTools;
+  init as cornerstoneToolsInit,
+} from '@cornerstonejs/tools';
+import dicomImageLoader, {
+  init as dicomImageLoaderInit,
+} from '@cornerstonejs/dicom-image-loader';
+import dicomParser from 'dicom-parser';
+import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
+
+const { MouseBindings } = cornerstoneToolsEnums;
 
 const state = {
   series: [],
@@ -175,13 +181,17 @@ async function init() {
   if (state.initPromise) return state.initPromise;
 
   state.initPromise = (async () => {
-  await cornerstone.init();
-  cornerstoneTools.init();
+  await cornerstoneInit();
+  await cornerstoneToolsInit();
 
   dicomImageLoader.external = dicomImageLoader.external || {};
-  dicomImageLoader.external.cornerstone = cornerstone;
+  dicomImageLoader.external = dicomImageLoader.external || {};
+  dicomImageLoader.external.cornerstone = {
+    ...dicomImageLoader.external.cornerstone,
+    RenderingEngine,
+  };
   dicomImageLoader.external.dicomParser = dicomParser;
-  dicomImageLoader.init({
+  await dicomImageLoaderInit({
     maxWebWorkers: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)),
     strict: false,
   });
@@ -191,7 +201,7 @@ async function init() {
   state.renderingEngine = new RenderingEngine(RENDERING_ENGINE_ID);
   state.renderingEngine.enableElement({
     viewportId: VIEWPORT_ID,
-    type: Enums.ViewportType.STACK,
+    type: cornerstoneEnums.ViewportType.STACK,
     element: el.viewport,
     defaultOptions: { background: [0, 0, 0] },
   });
