@@ -1,20 +1,9 @@
 import * as cornerstone from '@cornerstonejs/core';
-import {
-  Enums as cornerstoneToolsEnums,
-  ToolGroupManager,
-  StackScrollTool,
-  PanTool,
-  ZoomTool,
-  WindowLevelTool,
-  addTool,
-  init as cornerstoneToolsInit,
-} from '@cornerstonejs/tools';
-import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
+import { init as dicomImageLoaderInit, wadouri } from '@cornerstonejs/dicom-image-loader';
 import dicomParser from 'dicom-parser';
 import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
 
 const { RenderingEngine, Enums } = cornerstone;
-const { MouseBindings } = cornerstoneToolsEnums;
 
 const state = {
   series: [],
@@ -25,13 +14,14 @@ const state = {
   currentIndex: 0,
   renderingEngine: null,
   viewport: null,
-  toolGroup: null,
   cineTimer: null,
   cinePlaying: false,
   cineBusy: false,
   originalVOI: null,
   initialized: false,
   initPromise: null,
+  activeInteraction: null,
+  interactionStart: null,
   archiveModule: null,
 };
 
@@ -176,76 +166,44 @@ async function init() {
   if (state.initPromise) return state.initPromise;
 
   state.initPromise = (async () => {
-  await cornerstone.init();
-  await cornerstoneToolsInit();
+    await cornerstone.init();
 
-  dicomImageLoader.external = dicomImageLoader.external || {};
-  dicomImageLoader.external.cornerstone = cornerstone;
-  dicomImageLoader.external.dicomParser = dicomParser;
-  dicomImageLoader.init({
-    maxWebWorkers: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)),
-    strict: false,
-  });
+    dicomImageLoaderInit({
+      maxWebWorkers: Math.max(
+        1,
+        Math.min(4, navigator.hardwareConcurrency || 2)
+      ),
+    });
 
-  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(addTool);
+    state.renderingEngine = new RenderingEngine(RENDERING_ENGINE_ID);
+    state.renderingEngine.enableElement({
+      viewportId: VIEWPORT_ID,
+      type: Enums.ViewportType.STACK,
+      element: el.viewport,
+      defaultOptions: { background: [0, 0, 0] },
+    });
 
-  state.renderingEngine = new RenderingEngine(RENDERING_ENGINE_ID);
-  state.renderingEngine.enableElement({
-    viewportId: VIEWPORT_ID,
-    type: Enums.ViewportType.STACK,
-    element: el.viewport,
-    defaultOptions: { background: [0, 0, 0] },
-  });
+    state.viewport = state.renderingEngine.getViewport(VIEWPORT_ID);
 
-  state.viewport = state.renderingEngine.getViewport(VIEWPORT_ID);
+    const preventContextMenu = event => event.preventDefault();
+    el.viewport.addEventListener('contextmenu', preventContextMenu);
 
-  state.toolGroup =
-    ToolGroupManager.getToolGroup('DICOM_TOOL_GROUP') ||
-    ToolGroupManager.createToolGroup('DICOM_TOOL_GROUP');
+    const resize = () => {
+      try {
+        state.renderingEngine?.resize(true, true);
+        state.viewport?.render();
+      } catch (error) {
+        console.warn('No se pudo redimensionar el viewport:', error);
+      }
+    };
 
-  if (!state.toolGroup) {
-    throw new Error('No se pudo crear el grupo de herramientas de Cornerstone.');
-  }
-
-  [WindowLevelTool, PanTool, ZoomTool, StackScrollTool].forEach(tool => {
-    if (!state.toolGroup.hasTool(tool.toolName)) {
-      state.toolGroup.addTool(tool.toolName);
+    addEventListener('resize', resize);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(resize).observe(el.viewport);
     }
-  });
 
-  if (
-    !state.toolGroup
-      .getViewportIds()
-      .includes(VIEWPORT_ID)
-  ) {
-    state.toolGroup.addViewport(VIEWPORT_ID, RENDERING_ENGINE_ID);
-  }
-  state.toolGroup.setToolActive(WindowLevelTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Primary }],
-  });
-  state.toolGroup.setToolActive(PanTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Auxiliary }],
-  });
-  state.toolGroup.setToolActive(ZoomTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Secondary }],
-  });
-  state.toolGroup.setToolActive(StackScrollTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Wheel }],
-  });
-
-  el.viewport.addEventListener('contextmenu', event => event.preventDefault());
-
-  const resize = () => {
-    state.renderingEngine?.resize(true, true);
-    state.viewport?.render();
-  };
-
-  addEventListener('resize', resize);
-  if ('ResizeObserver' in window) {
-    new ResizeObserver(resize).observe(el.viewport);
-  }
-
-  state.initialized = true;
+    setupViewportInteractions();
+    state.initialized = true;
   })();
 
   try {
@@ -254,6 +212,117 @@ async function init() {
     state.initPromise = null;
     throw error;
   }
+}
+
+function getInteractionPoint(event) {
+  const rect = el.viewport.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function setupViewportInteractions() {
+  el.viewport.addEventListener(
+    'wheel',
+    event => {
+      if (!state.imageIds.length || !state.viewport) return;
+
+      event.preventDefault();
+
+      if (event.ctrlKey || event.metaKey) {
+        const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+        state.viewport.setZoom(
+          Math.max(0.1, Math.min(30, (state.viewport.getZoom?.() || 1) * factor))
+        );
+        state.viewport.render();
+        updateViewport();
+        return;
+      }
+
+      const direction = event.deltaY > 0 ? 1 : -1;
+      setSlice(state.currentIndex + direction);
+    },
+    { passive: false }
+  );
+
+  el.viewport.addEventListener('pointerdown', event => {
+    if (!state.viewport || !state.imageIds.length) return;
+
+    const button = event.button;
+    if (button !== 0 && button !== 1 && button !== 2) return;
+
+    const point = getInteractionPoint(event);
+    state.activeInteraction =
+      button === 0 ? 'voi' : button === 1 ? 'pan' : 'zoom';
+
+    state.interactionStart = {
+      point,
+      voi: state.viewport.getProperties().voiRange
+        ? { ...state.viewport.getProperties().voiRange }
+        : null,
+      pan: state.viewport.getPan?.() ? [...state.viewport.getPan()] : [0, 0],
+      zoom: state.viewport.getZoom?.() || 1,
+    };
+
+    el.viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  el.viewport.addEventListener('pointermove', event => {
+    if (!state.activeInteraction || !state.interactionStart || !state.viewport) {
+      return;
+    }
+
+    const point = getInteractionPoint(event);
+    const start = state.interactionStart;
+    const dx = point.x - start.point.x;
+    const dy = point.y - start.point.y;
+
+    try {
+      if (state.activeInteraction === 'pan') {
+        const startPan = start.pan || [0, 0];
+        state.viewport.setPan([startPan[0] + dx, startPan[1] + dy]);
+      } else if (state.activeInteraction === 'zoom') {
+        const factor = Math.exp(-dy * 0.01);
+        state.viewport.setZoom(
+          Math.max(0.1, Math.min(30, start.zoom * factor))
+        );
+      } else if (state.activeInteraction === 'voi' && start.voi) {
+        const width0 = Math.max(1, start.voi.upper - start.voi.lower);
+        const center0 = (start.voi.upper + start.voi.lower) / 2;
+        const width = Math.max(1, width0 * Math.exp(-dx * 0.006));
+        const center = center0 + dy * width0 * 0.004;
+
+        state.viewport.setProperties({
+          voiRange: {
+            lower: center - width / 2,
+            upper: center + width / 2,
+          },
+        });
+      }
+
+      state.viewport.render();
+      updateViewport();
+    } catch (error) {
+      console.warn('Interacción de viewport no disponible:', error);
+    }
+  });
+
+  const endInteraction = event => {
+    if (!state.activeInteraction) return;
+    try {
+      el.viewport.releasePointerCapture?.(event.pointerId);
+    } catch {}
+    state.activeInteraction = null;
+    state.interactionStart = null;
+  };
+
+  el.viewport.addEventListener('pointerup', endInteraction);
+  el.viewport.addEventListener('pointercancel', endInteraction);
+  el.viewport.addEventListener('pointerleave', event => {
+    if (event.buttons === 0) endInteraction(event);
+  });
 }
 
 function slicePosition(meta) {
@@ -599,7 +668,7 @@ async function setSeries(index) {
   state.files = series.images.map(item => item.file);
   state.imageMeta = series.images.map(item => item.meta);
   state.imageIds = state.files.map(file =>
-    dicomImageLoader.wadouri.fileManager.add(file)
+    wadouri.fileManager.add(file)
   );
   state.currentIndex = 0;
 
