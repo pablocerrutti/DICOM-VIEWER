@@ -1,8 +1,4 @@
-import {
-  Enums as cornerstoneEnums,
-  RenderingEngine,
-  init as cornerstoneInit,
-} from '@cornerstonejs/core';
+import * as cornerstone from '@cornerstonejs/core';
 import {
   Enums as cornerstoneToolsEnums,
   ToolGroupManager,
@@ -13,12 +9,11 @@ import {
   addTool,
   init as cornerstoneToolsInit,
 } from '@cornerstonejs/tools';
-import dicomImageLoader, {
-  init as dicomImageLoaderInit,
-} from '@cornerstonejs/dicom-image-loader';
+import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
 import dicomParser from 'dicom-parser';
 import { ArchiveReader, libarchiveWasm } from 'libarchive-wasm';
 
+const { RenderingEngine, Enums } = cornerstone;
 const { MouseBindings } = cornerstoneToolsEnums;
 
 const state = {
@@ -201,7 +196,7 @@ async function init() {
   state.renderingEngine = new RenderingEngine(RENDERING_ENGINE_ID);
   state.renderingEngine.enableElement({
     viewportId: VIEWPORT_ID,
-    type: cornerstoneEnums.ViewportType.STACK,
+    type: Enums.ViewportType.STACK,
     element: el.viewport,
     defaultOptions: { background: [0, 0, 0] },
   });
