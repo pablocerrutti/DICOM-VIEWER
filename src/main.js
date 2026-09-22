@@ -146,6 +146,8 @@ function parseBasic(file, buffer) {
       seriesNumber: Number(get('x00200011')) || 0,
       instanceNumber: Number(get('x00200013')) || 0,
       acquisitionNumber: Number(get('x00200012')) || 0,
+      echoNumber: Number(get('x00180086')) || 0,
+      temporalPositionIdentifier: Number(get('x00200100')) || 0,
       frameOfReferenceUID: get('x00200052'),
       imageType: clean(get('x00080008')),
       seriesInstanceUID,
@@ -328,24 +330,6 @@ function setupViewportInteractions() {
   });
 }
 
-function slicePosition(meta) {
-  const p = meta.imagePositionPatient;
-  const o = meta.imageOrientationPatient;
-
-  if (p.length >= 3 && o.length >= 6) {
-    const row = o.slice(0, 3);
-    const col = o.slice(3, 6);
-    const normal = [
-      row[1] * col[2] - row[2] * col[1],
-      row[2] * col[0] - row[0] * col[2],
-      row[0] * col[1] - row[1] * col[0],
-    ];
-    return p[0] * normal[0] + p[1] * normal[1] + p[2] * normal[2];
-  }
-
-  return Number.isFinite(meta.sliceLocation) ? meta.sliceLocation : null;
-}
-
 function orientationKey(meta) {
   const o = meta.imageOrientationPatient;
   if (!Array.isArray(o) || o.length < 6) return 'NO_ORIENTATION';
@@ -491,10 +475,18 @@ function buildSeries(parsed) {
 
     const key =
       baseSeriesKey +
+      '|FRAME|' +
+      (meta.frameOfReferenceUID || 'NO_FRAME') +
       '|PLANE|' +
       orientationKey(meta) +
       '|SIZE|' +
-      dimensionsKey(meta);
+      dimensionsKey(meta) +
+      '|ACQ|' +
+      (meta.acquisitionNumber || 0) +
+      '|ECHO|' +
+      (meta.echoNumber || 0) +
+      '|TIME|' +
+      (meta.temporalPositionIdentifier || 0);
 
     if (!map.has(key)) {
       map.set(key, {
