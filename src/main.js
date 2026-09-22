@@ -145,6 +145,9 @@ function parseBasic(file, buffer) {
       seriesDescription: clean(get('x0008103e')),
       seriesNumber: Number(get('x00200011')) || 0,
       instanceNumber: Number(get('x00200013')) || 0,
+      acquisitionNumber: Number(get('x00200012')) || 0,
+      frameOfReferenceUID: get('x00200052'),
+      imageType: clean(get('x00080008')),
       seriesInstanceUID,
       studyInstanceUID,
       sopInstanceUID,
@@ -343,16 +346,124 @@ function slicePosition(meta) {
   return Number.isFinite(meta.sliceLocation) ? meta.sliceLocation : null;
 }
 
-function sortImages(images) {
-  return images.sort((a, b) => {
-    const ap = slicePosition(a.meta);
-    const bp = slicePosition(b.meta);
+function orientationKey(meta) {
+  const o = meta.imageOrientationPatient;
+  if (!Array.isArray(o) || o.length < 6) return 'NO_ORIENTATION';
 
-    if (ap !== null && bp !== null && ap !== bp) return ap - bp;
-    if (a.meta.instanceNumber !== b.meta.instanceNumber) {
-      return a.meta.instanceNumber - b.meta.instanceNumber;
+  return o
+    .slice(0, 6)
+    .map(value => Math.round(Number(value) * 100000) / 100000)
+    .join(',');
+}
+
+function dimensionsKey(meta) {
+  return (meta.rows || 0) + 'x' + (meta.columns || 0);
+}
+
+function buildScanNormal(referenceMeta) {
+  const o = referenceMeta?.imageOrientationPatient;
+
+  if (!Array.isArray(o) || o.length < 6) return null;
+
+  const row = o.slice(0, 3).map(Number);
+  const col = o.slice(3, 6).map(Number);
+
+  const normal = [
+    row[1] * col[2] - row[2] * col[1],
+    row[2] * col[0] - row[0] * col[2],
+    row[0] * col[1] - row[1] * col[0],
+  ];
+
+  const length = Math.hypot(normal[0], normal[1], normal[2]);
+
+  if (!Number.isFinite(length) || length < 1e-8) return null;
+
+  return normal.map(value => value / length);
+}
+
+function positionAlongNormal(meta, normal) {
+  const p = meta?.imagePositionPatient;
+
+  if (!normal || !Array.isArray(p) || p.length < 3) return null;
+
+  const x = Number(p[0]);
+  const y = Number(p[1]);
+  const z = Number(p[2]);
+
+  if (![x, y, z].every(Number.isFinite)) return null;
+
+  return x * normal[0] + y * normal[1] + z * normal[2];
+}
+
+function sortImages(images) {
+  if (images.length <= 1) return images;
+
+  // Igual que OHIF: toma una imagen central como referencia
+  // para evitar utilizar accidentalmente una imagen scout/localizadora.
+  const candidates = images.filter(
+    item =>
+      item.meta.imagePositionPatient?.length >= 3 &&
+      item.meta.imageOrientationPatient?.length >= 6
+  );
+
+  const reference =
+    candidates[Math.floor(candidates.length / 2)] ||
+    images[Math.floor(images.length / 2)];
+
+  const normal = buildScanNormal(reference?.meta);
+
+  if (normal) {
+    const withPosition = images.map((item, index) => ({
+      item,
+      index,
+      position: positionAlongNormal(item.meta, normal),
+    }));
+
+    // Solo ordenamos espacialmente las imágenes que realmente
+    // tienen posición. Las restantes quedan al final y se ordenan
+    // mediante InstanceNumber/nombre.
+    withPosition.sort((a, b) => {
+      if (a.position !== null && b.position !== null) {
+        const delta = a.position - b.position;
+
+        if (Math.abs(delta) > 1e-4) {
+          return delta;
+        }
+      }
+
+      if (a.position !== null) return -1;
+      if (b.position !== null) return 1;
+
+      const aa = a.item.meta;
+      const bb = b.item.meta;
+
+      if ((aa.instanceNumber || 0) !== (bb.instanceNumber || 0)) {
+        return (aa.instanceNumber || 0) - (bb.instanceNumber || 0);
+      }
+
+      return aa.fileName.localeCompare(bb.fileName, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    });
+
+    return withPosition.map(entry => entry.item);
+  }
+
+  return images.sort((a, b) => {
+    const aa = a.meta;
+    const bb = b.meta;
+
+    const acqA = Number(aa.acquisitionNumber) || 0;
+    const acqB = Number(bb.acquisitionNumber) || 0;
+
+    if (acqA !== acqB) return acqA - acqB;
+
+    if ((aa.instanceNumber || 0) !== (bb.instanceNumber || 0)) {
+      return (aa.instanceNumber || 0) - (bb.instanceNumber || 0);
     }
-    return a.meta.fileName.localeCompare(b.meta.fileName, undefined, {
+
+    return aa.fileName.localeCompare(bb.fileName, undefined, {
       numeric: true,
       sensitivity: 'base',
     });
@@ -363,22 +474,36 @@ function buildSeries(parsed) {
   const map = new Map();
 
   for (const item of parsed) {
-    const key =
-      item.meta.seriesInstanceUID ||
+    const meta = item.meta;
+
+    // Una misma SeriesInstanceUID no siempre es suficiente para
+    // representar una única pila visual. Separar por orientación y
+    // dimensiones evita mezclar cortes sagitales, axiales, coronales
+    // o imágenes con geometría diferente.
+    const baseSeriesKey =
+      meta.seriesInstanceUID ||
       'NO_UID|' +
-        item.meta.seriesNumber +
+        meta.seriesNumber +
         '|' +
-        item.meta.modality +
+        meta.modality +
         '|' +
-        item.meta.seriesDescription;
+        meta.seriesDescription;
+
+    const key =
+      baseSeriesKey +
+      '|PLANE|' +
+      orientationKey(meta) +
+      '|SIZE|' +
+      dimensionsKey(meta);
 
     if (!map.has(key)) {
       map.set(key, {
-        uid: item.meta.seriesInstanceUID || key,
-        studyInstanceUID: item.meta.studyInstanceUID,
-        seriesNumber: item.meta.seriesNumber,
-        description: item.meta.seriesDescription,
-        modality: item.meta.modality,
+        uid: key,
+        sourceSeriesInstanceUID: meta.seriesInstanceUID || '',
+        studyInstanceUID: meta.studyInstanceUID,
+        seriesNumber: meta.seriesNumber,
+        description: meta.seriesDescription,
+        modality: meta.modality,
         images: [],
       });
     }
@@ -389,11 +514,20 @@ function buildSeries(parsed) {
   const series = [...map.values()];
   series.forEach(seriesItem => sortImages(seriesItem.images));
 
-  return series.sort(
-    (a, b) =>
-      (a.seriesNumber || 0) - (b.seriesNumber || 0) ||
-      String(a.description || '').localeCompare(String(b.description || ''))
-  );
+  return series.sort((a, b) => {
+    const numberDiff =
+      (a.seriesNumber || 0) - (b.seriesNumber || 0);
+
+    if (numberDiff !== 0) return numberDiff;
+
+    const descriptionDiff = String(a.description || '').localeCompare(
+      String(b.description || '')
+    );
+
+    if (descriptionDiff !== 0) return descriptionDiff;
+
+    return String(a.uid).localeCompare(String(b.uid));
+  });
 }
 
 async function getArchiveModule() {
