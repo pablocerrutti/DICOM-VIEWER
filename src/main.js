@@ -375,9 +375,6 @@ function planeFamily(meta) {
   return 'OBLIQUE';
 }
 
-function dimensionsKey(meta) {
-  return (meta.rows || 0) + 'x' + (meta.columns || 0);
-}
 
 function buildScanNormal(referenceMeta) {
   const o = referenceMeta?.imageOrientationPatient;
@@ -487,6 +484,23 @@ function sortImages(images) {
     const aa = a.meta;
     const bb = b.meta;
 
+    const sliceA = Number.isFinite(aa.sliceLocation) ? aa.sliceLocation : null;
+    const sliceB = Number.isFinite(bb.sliceLocation) ? bb.sliceLocation : null;
+
+    if (sliceA !== null && sliceB !== null && Math.abs(sliceA - sliceB) > 1e-4) {
+      return sliceA - sliceB;
+    }
+
+    if (
+      (aa.temporalPositionIdentifier || 0) !==
+      (bb.temporalPositionIdentifier || 0)
+    ) {
+      return (
+        (aa.temporalPositionIdentifier || 0) -
+        (bb.temporalPositionIdentifier || 0)
+      );
+    }
+
     const acqA = Number(aa.acquisitionNumber) || 0;
     const acqB = Number(bb.acquisitionNumber) || 0;
 
@@ -509,10 +523,10 @@ function buildSeries(parsed) {
   for (const item of parsed) {
     const meta = item.meta;
 
-    // Una misma SeriesInstanceUID no siempre es suficiente para
-    // representar una única pila visual. Separar por orientación y
-    // dimensiones evita mezclar cortes sagitales, axiales, coronales
-    // o imágenes con geometría diferente.
+    // SeriesInstanceUID es el identificador principal de la secuencia.
+    // Solo subdividimos si dentro de una misma serie hay planos anatómicos
+    // realmente distintos. No separamos por adquisición, eco o tiempo,
+    // porque eso fragmentaría innecesariamente una misma secuencia.
     const baseSeriesKey =
       meta.seriesInstanceUID ||
       'NO_UID|' +
@@ -525,9 +539,7 @@ function buildSeries(parsed) {
     const key =
       baseSeriesKey +
       '|PLANE|' +
-      planeFamily(meta) +
-      '|SIZE|' +
-      dimensionsKey(meta);
+      planeFamily(meta);
 
     if (!map.has(key)) {
       map.set(key, {
